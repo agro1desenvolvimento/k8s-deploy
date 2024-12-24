@@ -1,0 +1,127 @@
+name: 'K8s Deploy'
+description: 'Deploy YAML to Kubernetes'
+
+inputs:
+  kube-config:
+    description: 'Base64 encoded K8s kubectl config'
+    required: true
+  tag-name:
+    description: 'Docker image tag name'
+    required: true
+    default: 'staging'
+  yaml-file-path:
+    description: 'Path to the YAML file'
+    required: true
+
+  cluster-name:
+    description: 'Kubernetes cluster name'
+    required: false
+    default: 'none'
+
+  debug:
+    description: 'Enable debug mode'
+    required: false
+    default: 'true'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Debug Inputs
+      if: ${{ inputs.debug == 'true' }}
+      shell: bash
+      run: |
+        echo "Inputs: 
+        tag-name=${{ inputs.tag-name }}, 
+        yaml-file-path=${{ inputs.yaml-file-path }}, 
+        cluster-name=${{ inputs.cluster-name }}, 
+        debug=${{ inputs.debug }}"
+
+    - name: Install kubectl
+      shell: bash
+      run: |
+        KUBECTL_VERSION=$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)
+        curl -LO "https://storage.googleapis.com/kubernetes-release/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+        chmod +x ./kubectl
+        sudo mv ./kubectl /usr/local/bin/kubectl
+        kubectl version --client
+
+    - name: Configure kubectl
+      shell: bash
+      run: |
+        mkdir -p $HOME/.kube
+        echo "${{ inputs.kube-config }}" | base64 -d > $HOME/.kube/config
+        chmod 600 $HOME/.kube/config
+        kubectl config view
+    
+    - name: Kubectl use context
+      if: ${{ inputs.cluster-name != 'none' }}
+      shell: bash
+      run: kubectl config use-context ${{ inputs.cluster-name }}
+
+    - name: Debug kubectl contexts
+      if: ${{ inputs.debug == 'true' }}
+      shell: bash
+      run: kubectl config get-contexts
+
+    - name: Generate Action Number
+      id: generate_action_number
+      shell: bash
+      run: |
+        ACTION_ID=$(echo $GITHUB_REF | cut -d / -f 3)-$GITHUB_RUN_NUMBER
+        echo "action-id=$ACTION_ID" >> $GITHUB_OUTPUT
+
+    - name: Update YAML File
+      shell: bash
+      run: |
+        sed -i "s|<ID>|${{ inputs.tag-name }}|g" $GITHUB_WORKSPACE${{ inputs.yaml-file-path }}
+        sed -i "s|<ACTION-ID>|${{ steps.generate_action_number.outputs.action-id }}|g" $GITHUB_WORKSPACE${{ inputs.yaml-file-path }}
+
+    - name: Debug Updated YAML
+      if: ${{ inputs.debug == 'true' }}
+      shell: bash
+      run: cat $GITHUB_WORKSPACE${{ inputs.yaml-file-path }}
+
+    - name: Get namespace from YAML
+      shell: bash
+      run: |
+        NAMESPACE=$(yq '.metadata.namespace' $GITHUB_WORKSPACE${{ inputs.yaml-file-path }})
+        echo "NAMESPACE=$NAMESPACE" >> $GITHUB_ENV
+    
+    - name: Get app name from YAML
+      shell: bash
+      run: |
+        APP_NAME=$(yq '.metadata.name' $GITHUB_WORKSPACE${{ inputs.yaml-file-path }})
+        echo "APP_NAME=$APP_NAME" >> $GITHUB_ENV
+
+    - name: Get type from YAML
+      shell: bash
+      run: |
+        TYPE=$(yq '.kind' $GITHUB_WORKSPACE${{ inputs.yaml-file-path }})
+        echo "TYPE=$TYPE" >> $GITHUB_ENV
+        
+    - name: Debug Inputs
+      if: ${{ inputs.debug == 'true' }}
+      shell: bash
+      run: |
+        echo "Inputs: 
+        tag-name=${{ inputs.tag-name }}, 
+        yaml-file-path=${{ inputs.yaml-file-path }}, 
+        cluster-name=${{ inputs.cluster-name }}, 
+        app-name=$APP_NAME, 
+        namespace=$NAMESPACE, 
+        type=$TYPE, 
+        debug=${{ inputs.debug }}"
+
+    - name: Deploy to Kubernetes
+      shell: bash
+      run: kubectl apply -f $GITHUB_WORKSPACE${{ inputs.yaml-file-path }}
+
+    # Rollout restart for staging tag
+    - name: Rollout Restart (Staging)
+      if: ${{ inputs.tag-name == 'staging' }}
+      shell: bash
+      run: kubectl rollout restart -n $NAMESPACE $TYPE/$APP_NAME
+
+    - name: Verify Deployment
+      shell: bash
+      run: kubectl rollout status $TYPE/$APP_NAME -n $NAMESPACE
