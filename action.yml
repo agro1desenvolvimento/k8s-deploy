@@ -8,16 +8,13 @@ inputs:
   tag-name:
     description: 'Docker image tag name'
     required: true
-    default: 'staging'
   yaml-file-path:
     description: 'Path to the YAML file'
     required: true
-
   cluster-name:
     description: 'Kubernetes cluster name'
     required: false
     default: 'none'
-
   debug:
     description: 'Enable debug mode'
     required: false

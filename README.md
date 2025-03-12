@@ -4,13 +4,31 @@ This GitHub Action allows you to deploy YAML configurations to a Kubernetes clus
 
 ## Inputs
 
-| Input            | Required | Default Value  | Description                                                                                                                          |
-| ---------------- | -------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `kube-config`    | Yes      |       | Base64 encoded kubectl configuration for accessing the Kubernetes cluster.                                                           |
-| `tag-name`       | Yes      | `staging`      | Docker image tag name to use.                                                                                                        |
-| `yaml-file-path` | Yes      |     | Path to the Kubernetes YAML configuration file.                                                                                      |
-| `cluster-name`   | No       | `none`         | Name of the Kubernetes cluster to use (context). If not set, the action will use the context currently configured in kube config.    |
-| `debug`          | No       | `true`        | Enables or disables debug mode (true/false).                                                                                         |
+| Input | Description | Required | Default |
+|-------|-------------|:--------:|---------|
+| `kube-config` | Base64 encoded kubectl config file | ✅ | - |
+| `tag-name` | Docker image tag to use (replaces `<ID>` in YAML) | ✅ | - |
+| `yaml-file-path` | Path to Kubernetes YAML file | ✅ | - |
+| `cluster-name` | Kubernetes cluster context name | ❌ | `none` |
+| `debug` | Enable debug mode with additional logging | ❌ | `true` |
+           |
+
+## Creating the kube-config
+
+To create a `kube-config`, follow these steps:
+
+1. **Generate the Configuration File:**
+
+   - Use the following command to fetch the kubeconfig file for your Kubernetes cluster:
+     ```bash
+        kubectl config view --raw | base64
+     ```
+
+3. **Use the Encoded Content:**
+
+   - Copy the Base64 content and create a new action secret in your GitHub repository or organization.
+
+
 
 ## Basic usage Example
 
@@ -38,22 +56,6 @@ jobs:
           yaml-file-path: ./deployments/app.yaml
 
 ```
-
-## Creating the kube-config
-
-To create a `kube-config`, follow these steps:
-
-1. **Generate the Configuration File:**
-
-   - Use the following command to fetch the kubeconfig file for your Kubernetes cluster:
-     ```bash
-        kubectl config view --raw | base64
-     ```
-
-3. **Use the Encoded Content:**
-
-   - Copy the Base64 content and create a new action secret in your GitHub repository or organization.
-
 
 ## YAML File Requirements
 
@@ -94,8 +96,4 @@ spec:
 - Ensure that the `kubectl` configuration has sufficient permissions to manage resources in the cluster.
 - The `yaml-file-path` must point to a valid Kubernetes YAML configuration file.
 
-
-## License
-
-This project is licensed under the [MIT License](LICENSE).
 
